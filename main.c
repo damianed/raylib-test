@@ -1,4 +1,4 @@
-//#include <stdio.h>
+#include <stdio.h>
 #include "raylib.h"
 
 #define WINDOW_HEIGHT 600
@@ -42,11 +42,24 @@ Color getRandomColor() {
 
 typedef struct {
     Vector2 pos;
-    int size;
+    int radius;
     int mass;
+    Color color;
 } Ball;
 
 #define GRAVITY 9.8
+#define DRAG    0
+
+Ball createBall(Vector2 pos, Color color) {
+    Ball ball = {
+        .pos  = pos,
+        .radius = 20,
+        .mass = 5,
+        .color = color
+    };
+
+    return ball;
+}
 
 int main() {
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Bouncing physics");
@@ -54,31 +67,102 @@ int main() {
     int refresh_rate =  GetMonitorRefreshRate(current_monitor);
     SetTargetFPS(refresh_rate);
 
-    Vector2 pos = {
-        .x  = (float) WINDOW_WIDTH/2,
-        .y  = (float) WINDOW_HEIGHT/2,
-    };
-    Ball ball = {
-        .pos  = pos,
-        .size = 20,
-        .mass = 5,
-    };
+    //Vector2 pos = {
+    //    .x  = (float) WINDOW_WIDTH/2,
+    //    .y  = (float) WINDOW_HEIGHT/2,
+    //};
+#define MAX_BALLS 50
+    Ball active_balls[MAX_BALLS] = {0};
+    int ball_count = 0;
 
-    Vector2 ball_speed = {0, 0};
+    Vector2 ball_speeds[MAX_BALLS] = {0};
+    Color colors[] = {BLUE, GREEN, ORANGE};
+    int color_index = 0;
 
+    Ball freezed_ball = {0};
+
+    int ball_index = 0;
     while(!WindowShouldClose()) {
         BeginDrawing();
         {
             float dt = GetFrameTime();
             ClearBackground(RAYWHITE);
-            float force = ball.mass * GRAVITY * dt;
-            ball_speed.y += force;
-            ball.pos.y += ball_speed.y;
-            if (ball.pos.y > (WINDOW_HEIGHT - ball.size)) {
-                ball_speed.y *= -0.90; // invert speed (multiply by -1) but take some for loss of energy
-                ball.pos.y = (WINDOW_HEIGHT - ball.size);
+
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                Vector2 mouse_pos = GetMousePosition();
+                freezed_ball = createBall(mouse_pos, colors[color_index++ % 3]);
             }
-            DrawCircleV(*((Vector2 *) &ball), ball.size, BLUE);
+
+            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                ball_index = ball_index % MAX_BALLS;
+                Vector2 force_start = freezed_ball.pos;
+                Vector2 force_end = GetMousePosition();
+
+                float force_factor = 0.3;
+                Vector2 ending_force;
+                ending_force.y = (force_start.y - force_end.y) * force_factor;
+                ending_force.x = (force_start.x - force_end.x) * force_factor;
+
+                active_balls[ball_index] = freezed_ball;
+                freezed_ball.radius = 0;
+                ball_speeds[ball_index].y = ending_force.y;
+                ball_speeds[ball_index].x = ending_force.x;
+                if (ball_count < MAX_BALLS) {
+                    ball_count++;
+                }
+                ball_index++;
+            }
+
+            if (freezed_ball.radius > 0) {
+                DrawCircleV(freezed_ball.pos, freezed_ball.radius, freezed_ball.color);
+            }
+
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                Vector2 mouse_pos = GetMousePosition();
+                Vector2 start_pos = freezed_ball.pos;
+                //Vector2 size;
+                //size.y = mouse_pos.y - freezed_ball.pos.y;
+                //size.y = size.y < 0 ? -1 * size.y : size.y;
+                //size.x = mouse_pos.x - freezed_ball.pos.x;
+                //size.x = size.x < 0 ? -1 * size.x : size.x;
+                //printf("size.y: %f size.x %f\n", size.y, size.x);
+                //if (size.y > 0 || size.x > 0) {
+                //}
+                DrawLineEx(start_pos, mouse_pos, 5, RED);
+            }
+
+            if (ball_count != 0) {
+                for (int i = 0; i < ball_count; i++) {
+                    Ball *ball = active_balls + i;
+                    Vector2 *ball_speed = ball_speeds + i;
+
+                    float force = ball->mass * GRAVITY * dt;
+                    ball_speed->y += force;
+                    ball->pos.y += ball_speed->y;
+
+                    if (ball_speed->x < 0) {
+                        ball_speed->x += DRAG;
+                    } else if(ball_speed->x > 0) {
+                        ball_speed->x -= DRAG;
+                    }
+                    ball->pos.x += ball_speed->x;
+
+                    if (ball->pos.y > (WINDOW_HEIGHT - ball->radius)) {
+                        ball_speed->y *= -0.9; // invert speed (multiply by -1) but take some for loss of energy
+                        ball->pos.y = (WINDOW_HEIGHT - ball->radius);
+                    }
+
+                    if (ball->pos.x > (WINDOW_WIDTH - ball->radius)) {
+                        ball_speed->x *= -0.9;
+                        ball->pos.x = (WINDOW_WIDTH - ball->radius);
+                    } else if (ball->pos.x < ball->radius) {
+                        ball_speed->x *= -0.9;
+                        ball->pos.x = ball->radius;
+                    }
+
+                    DrawCircleV(ball->pos, ball->radius, ball->color);
+                }
+            }
         } EndDrawing();
     }
 }
